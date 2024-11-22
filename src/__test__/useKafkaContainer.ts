@@ -57,6 +57,7 @@ export function useKafkaContainer(exposedPort = 9093) {
     container = await new KafkaContainer('confluentinc/cp-kafka:7.7.1')
       .withKraft()
       .withExposedPorts(exposedPort, 9094)
+      .withStartupTimeout(90_000)
       .start()
 
     const host = container.getHost()
