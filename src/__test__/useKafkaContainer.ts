@@ -1,38 +1,53 @@
-import { KafkaJS } from '@confluentinc/kafka-javascript'
 import {
   KafkaContainer,
   type StartedKafkaContainer,
 } from '@testcontainers/kafka'
+import {
+  type Admin,
+  type Consumer,
+  type ITopicConfig,
+  Kafka,
+  type Producer,
+} from 'kafkajs'
 import { v4 as uuidv4 } from 'uuid'
 import { afterAll, afterEach, beforeAll, beforeEach, expect } from 'vitest'
 
 function createKafkaTestContext(
   container: StartedKafkaContainer,
-  admin: KafkaJS.Admin,
-  consumer: KafkaJS.Consumer
+  admin: Admin,
+  producer: Producer,
+  consumer: Consumer,
+  consumerGroupId: string,
+  randomTopicName: string
 ): KafkaTestContext {
   return {
     kafka: {
       container,
       admin,
+      producer,
       consumer,
+      consumerGroupId,
+      randomTopicName,
     },
   }
 }
 
-interface KafkaTestContext {
+export interface KafkaTestContext {
   kafka: {
     container: StartedKafkaContainer
-    admin: KafkaJS.Admin
-    consumer: KafkaJS.Consumer
+    admin: Admin
+    producer: Producer
+    consumer: Consumer
+    consumerGroupId: string
+    randomTopicName: string
   }
 }
 
 export function useKafkaContainer(exposedPort = 9093) {
   let container: StartedKafkaContainer
-  let kafka: KafkaJS.Kafka
+  let kafka: Kafka
 
-  function createTopicConfig(topic: string): KafkaJS.ITopicConfig {
+  function createTopicConfig(topic: string): ITopicConfig {
     return {
       topic: topic,
       numPartitions: 1,
@@ -40,9 +55,9 @@ export function useKafkaContainer(exposedPort = 9093) {
     }
   }
 
-  async function createRandomTopic(admin: KafkaJS.Admin) {
+  async function createRandomTopic(admin: Admin) {
     const topic = uuidv4()
-    const config: KafkaJS.ITopicConfig = {
+    const config: ITopicConfig = {
       topic,
       numPartitions: 1,
       replicationFactor: 1,
@@ -62,14 +77,12 @@ export function useKafkaContainer(exposedPort = 9093) {
     const host = container.getHost()
     const port = container.getMappedPort(exposedPort)
 
-    kafka = new KafkaJS.Kafka({
-      kafkaJS: {
-        clientId: 'my-client-id',
-        brokers: [`${host}:${port}`],
-        ssl: false,
-      },
+    kafka = new Kafka({
+      clientId: 'my-client-id',
+      brokers: [`${host}:${port}`],
+      ssl: false,
     })
-  }, 60_000)
+  }, 90_000)
 
   afterAll(async () => {
     if (container) {
@@ -96,22 +109,39 @@ export function useKafkaContainer(exposedPort = 9093) {
       .poll(async () => await admin.listTopics(), { timeout: 5_000 })
       .toEqual(expect.arrayContaining([randomTopicName]))
 
-    const consumerGroupId = `consumer-${uuidv4()}`
-    const consumer = kafka.consumer({
-      kafkaJS: {
-        groupId: consumerGroupId,
+    const producer = kafka.producer({
+      allowAutoTopicCreation: false, // Should be set up by the test, or fail
+      retry: {
+        retries: 5,
+        initialRetryTime: 1_000,
+        maxRetryTime: 10_000,
       },
+      transactionTimeout: 5_000,
     })
 
-    context.kafka = createKafkaTestContext(container, admin, consumer).kafka
+    const consumerGroupId = `consumer-${uuidv4()}`
+    const consumer = kafka.consumer({
+      groupId: consumerGroupId,
+    })
 
+    context.kafka = createKafkaTestContext(
+      container,
+      admin,
+      producer,
+      consumer,
+      consumerGroupId,
+      randomTopicName
+    ).kafka
+
+    await producer.connect()
     await consumer.connect()
-  }, 60_000)
+  }, 90_000)
 
   afterEach<KafkaTestContext>(async (context) => {
-    const { admin, consumer } = context.kafka
+    const { admin, consumer, producer } = context.kafka
 
+    await producer.disconnect()
     await consumer.disconnect()
     await admin.disconnect()
-  }, 60_000)
+  }, 90_000)
 }

@@ -1,7 +1,7 @@
 {
   "dependencies": {
-    "@confluentinc/kafka-javascript": "^0.5.1",
     "@testcontainers/kafka": "^10.14.0",
+    "kafkajs": "^2.2.4",
     "prettier": "^3.3.3",
     "testcontainers": "^10.14.0",
     "uuid": "^11.0.3",
