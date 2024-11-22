@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Ensure the number of iterations is provided
+if [ -z "$1" ]; then
+  echo "Error: Number of iterations not provided."
+  exit 1
+fi
+
 n=$1
 test_id=$(uuidgen)
 
