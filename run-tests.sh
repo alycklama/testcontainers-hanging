@@ -13,4 +13,4 @@ do
 done
 
 ls logs/vitest-* | wc -l
-cat logs/vitest-* | grep failed
+cat logs/vitest-* | grep "failed ("
